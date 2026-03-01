@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Calendar System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .time-display {
+            font-size: 1.2em;
+            color: #666;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            background: #f0f0f0;
+            color: #666;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .tab-btn:hover {
+            background: #e0e0e0;
+        }
+        
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .badge {
+            background: #ff4757;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        
+        .main-content {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            min-height: 400px;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content > h2 {
+            margin-bottom: 30px;
+        }
+        
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .form-row > div {
+            flex: 1;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 12px;
+            color: #444;
+            font-weight: 500;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-danger {
+            background: #ff4757;
+        }
+        
+        .btn-danger:hover {
+            background: #ff3742;
+            box-shadow: 0 5px 15px rgba(255, 71, 87, 0.4);
+        }
+        
+        .btn-success {
+            background: #2ed573;
+        }
+        
+        .btn-success:hover {
+            background: #25c462;
+            box-shadow: 0 5px 15px rgba(46, 213, 115, 0.4);
+        }
+        
+        .btn-warning {
+            background: #ffa502;
+        }
+        
+        .btn-warning:hover {
+            background: #ff9900;
+            box-shadow: 0 5px 15px rgba(255, 165, 2, 0.4);
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .events-container {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .event-item {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .event-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .event-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .event-details {
+            color: #666;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .event-meta {
+            display: flex;
+            justify-content: space-between;
+            color: #888;
+            font-size: 14px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #888;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .system-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            color: #666;
+        }
+        
+        .info-value {
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .custom-days {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .day-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .repeat-options {
+            display: none;
+        }
+        
+        .repeat-options.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .reminder-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #2ed573;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .reminder-indicator.none {
+            background: #ce1a1a;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+        
+        .delete-confirm {
+            background: #ffeaea;
+            border: 2px solid #ff4757;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .delete-confirm.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #667eea;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                flex-direction: column;
+            }
+            
+            .tabs {
+                flex-wrap: wrap;
+            }
+            
+            .tab-btn {
+                flex: 1;
+                min-width: 120px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>📅 ESP32 Calendar</h1>
+                <div class="time-display" id="currentTime">Loading time...</div>
+            </div>
+            <div>
+                <button class="btn btn-success" onclick="syncTime()">
+                    🔄 Sync Time
+                </button>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('addEvent')">
+                ➕ Add Event
+            </button>
+            <button class="tab-btn" onclick="showTab('viewEvents')">
+                📋 View Events
+            </button>
+            <button class="tab-btn" onclick="showTab('stats')">
+                📊 Statistics
+            </button>
+            <button class="tab-btn" onclick="showTab('system')">
+                ⚙️ System Info
+            </button>
+        </div>
+        
+        <div class="main-content">
+            <!-- Add Event Tab -->
+            <div id="addEvent" class="tab-content active">
+                <h2>➕ Add New Event</h2>
+                <div class="form-group">
+                    <div class="form-row">
+                        <div>
+                            <label for="eventName">📝 Event Name</label>
+                            <input type="text" id="eventName" placeholder="Enter event name" maxlength="15">
+                        </div>
+                        <div>
+                            <label for="eventDateTime">📅 Date & Time</label>
+                            <input type="datetime-local" id="eventDateTime">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div>
+                            <label for="eventReminder">🔔 Reminder</label>
+                            <select id="eventReminder" onchange="toggleReminderOptions()">
+                                <option value="0">No Reminder</option>
+                                <option value="1">1 Hour Before</option>
+                                <option value="2">1 Day Before</option>
+                                <option value="3">1 Week Before</option>
+                                <option value="4">1 Month Before</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="eventRepeat">🔁 Repeat</label>
+                            <select id="eventRepeat" onchange="toggleRepeatOptions()">
+                                <option value="0">No Repeat</option>
+                                <option value="1">Daily</option>
+                                <option value="2">Weekly</option>
+                                <option value="3">Monthly</option>
+                                <option value="4">Yearly</option>
+                                <option value="5">Custom</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="repeat-options" id="repeatOptions">
+                        <div class="form-row">
+                            <div>
+                                <label for="repeatInterval">⏰ Repeat Every</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="number" id="repeatInterval" value="1" min="1" max="127" style="flex: 1;">
+                                    <span id="intervalUnit" style="line-height: 45px;">days</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="custom-days-options" id="customDaysOptions" style="display: none;">
+                            <label>📅 Repeat on Days:</label>
+                            <div class="custom-days">
+                                <label class="day-checkbox"><input type="checkbox" value="1"> Mon</label>
+                                <label class="day-checkbox"><input type="checkbox" value="2"> Tue</label>
+                                <label class="day-checkbox"><input type="checkbox" value="4"> Wed</label>
+                                <label class="day-checkbox"><input type="checkbox" value="8"> Thu</label>
+                                <label class="day-checkbox"><input type="checkbox" value="16"> Fri</label>
+                                <label class="day-checkbox"><input type="checkbox" value="32"> Sat</label>
+                                <label class="day-checkbox"><input type="checkbox" value="64"> Sun</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="eventDetails">📄 Details</label>
+                        <textarea id="eventDetails" placeholder="Enter event details (optional)" maxlength="31"></textarea>
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn" onclick="addEvent()">
+                        💾 Save Event
+                    </button>
+                    <button class="btn" onclick="resetForm()">
+                        ↩️ Reset Form
+                    </button>
+                </div>
+            </div>
+            
+            <!-- View Events Tab -->
+            <div id="viewEvents" class="tab-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>📋 All Events</h2>
+                    <div>
+                        <button class="btn" onclick="loadEvents()">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="events-container" id="eventsList">
+                    <div class="loading">
+                        <div class="spinner"></div> Loading events...
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Statistics Tab -->
+            <div id="stats" class="tab-content">
+                <h2>📊 System Statistics</h2>
+                
+                <div class="stats-grid" id="statsContainer">
+                    <div class="loading">
+                        <div class="spinner"></div> Loading statistics...
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn" onclick="updateStats()">
+                        🔄 Refresh Stats
+                    </button>
+                    <button class="btn btn-success" onclick="handleBackup()">
+                        📥 Create Backup
+                    </button>
+                </div>
+            </div>
+            
+            <!-- System Info Tab -->
+            <div id="system" class="tab-content">
+                <h2>⚙️ System Information</h2>
+                
+                <div class="system-info" id="systemInfo">
+                    <div class="loading">
+                        <div class="spinner"></div> Loading system info...
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn" onclick="loadSystemInfo()">
+                        🔄 Refresh
+                    </button>
+                    <button class="btn btn-success" onclick="exportEvents()">
+                        📤 Export Events
+                    </button>
+                    <button class="btn btn-warning" onclick="importEvents()">
+                        📥 Import Events
+                    </button>
+                    <button class="btn btn-danger" onclick="factoryReset()">
+                        ⚠️ Factory Reset
+                    </button>
+                </div>
+                
+                <div id="importSection" style="display: none; margin-top: 20px;">
+                    <label for="importData">📥 Paste JSON Data:</label>
+                    <textarea id="importData" placeholder='Paste JSON data here...' style="height: 150px; font-family: monospace;"></textarea>
+                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="doImport()">
+                            ✅ Import
+                        </button>
+                        <button class="btn" onclick="cancelImport()">
+                            ❌ Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+// ========== TAB FUNCTIONS ==========
+function showTab(tabName) {
+    console.log("Switching to tab:", tabName);
+    
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab
+    const tabContent = document.getElementById(tabName);
+    if (tabContent) {
+        tabContent.classList.add('active');
+    }
+    
+    // Update active tab button
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Activate clicked button
+    const clickedBtn = document.querySelector(`[onclick*="${tabName}"]`);
+    if (clickedBtn) clickedBtn.classList.add('active');
+    
+    // Load data for the tab
+    switch(tabName) {
+        case 'viewEvents':
+            loadEvents();
+            break;
+        case 'stats':
+            updateStats();
+            break;
+        case 'system':
+            loadSystemInfo();
+            break;
+    }
+}
+
+// ========== TIME FUNCTIONS ==========
+function updateTime() {
+    fetch('/getTime')
+        .then(r => r.json())
+        .then(d => {
+            time_display = document.getElementById("currentTime");
+            time_display.innerHTML = String(d.date) + "/" + String(d.month) + "/"
+            + String(d.year) + " " + String(d.hour) + ":" + String(d.min)
+            console.log(d)
+        })
+        .catch(e => console.error('Fetch error:', e));
+}
+
+function syncTime() {
+    const now = new Date();
+    
+    // Always use 24-hour format
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    
+    const datetime = now.getFullYear() + '-' + 
+                   String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(now.getDate()).padStart(2, '0') + 'T' + 
+                   hours + ':' + minutes + ':' + seconds; // No AM/PM
+    
+    fetch('/setTime?datetime=' + encodeURIComponent(datetime))
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Convert object to readable string
+            const timeStr = `${data.hour}:${data.min}:${data.sec}`;
+            const dateStr = `${data.date}/${data.month}/${data.year}`;
+            alert(`Time synced successfully!\n\nDate: ${dateStr}\nTime: ${timeStr}`);
+            
+            // Update the displayed time
+            updateTime();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error setting time: ' + error.message);
+        });
+}
+
+// ========== EVENT FORM FUNCTIONS ==========
+function toggleRepeatOptions() {
+    const repeatType = document.getElementById('eventRepeat').value;
+    const repeatOptions = document.getElementById('repeatOptions');
+    const customDaysOptions = document.getElementById('customDaysOptions');
+    const intervalUnit = document.getElementById('intervalUnit');
+    
+    if (repeatType > 0) {
+        repeatOptions.classList.add('show');
+        intervalUnit.textContent = 
+            repeatType === '1' ? 'days' :
+            repeatType === '2' ? 'weeks' :
+            repeatType === '3' ? 'months' :
+            repeatType === '4' ? 'years' : 'weeks';
+        
+        if (customDaysOptions) {
+            customDaysOptions.style.display = repeatType === '5' ? 'block' : 'none';
+        }
+    } else {
+        repeatOptions.classList.remove('show');
+    }
+}
+
+function resetForm() {
+    document.getElementById('eventName').value = '';
+    document.getElementById('eventDetails').value = '';
+    document.getElementById('eventReminder').value = '0';
+    document.getElementById('eventRepeat').value = '0';
+    document.getElementById('repeatInterval').value = '1';
+    
+    document.querySelectorAll('.custom-days input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    
+    toggleRepeatOptions();
+    updateTime();
+}
+
+function addEvent() {
+    const name = document.getElementById('eventName').value.trim();
+    const dateTime = document.getElementById('eventDateTime').value;
+    const details = document.getElementById('eventDetails').value.trim();
+    const reminder = document.getElementById('eventReminder').value;
+    const repeatType = document.getElementById('eventRepeat').value;
+    const repeatInterval = document.getElementById('repeatInterval').value;
+    
+    if (!name) {
+        alert('Please enter an event name');
+        return;
+    }
+    
+    if (!dateTime) {
+        alert('Please select a date and time');
+        return;
+    }
+    
+    let repeatDays = 0;
+    if (repeatType === '5') {
+        console.log(5);
+        document.querySelectorAll('.custom-days input[type="checkbox"]:checked').forEach(cb => 
+            repeatDays += parseInt(cb.getAttribute("value"))
+        );
+    }
+    
+    const eventData = {
+        name: name,
+        details: details,
+        date: dateTime,
+        reminder: parseInt(reminder),
+        repeatType: parseInt(repeatType),
+        repeatInterval: parseInt(repeatInterval),
+        repeatDays: repeatDays
+    };
+    
+    fetch('/addEvent', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(eventData)
+    })
+    .then(response => response.text())
+    .then(data => {
+        alert(data);
+        resetForm();
+        showTab('viewEvents');
+    })
+    .catch(error => {
+        alert('Error adding event: ' + error.message);
+    });
+}
+
+// ========== EVENT LIST FUNCTIONS ==========
+function loadEvents() {
+    const eventsList = document.getElementById('eventsList');
+    eventsList.innerHTML = '<div class="loading"><div class="spinner"></div> Loading events...</div>';
+    
+    fetch('/getEvents')
+        .then(response => response.json())
+        .then(events => displayEvents(events))
+        .catch(error => {
+            eventsList.innerHTML = '<div class="empty-state">Error loading events</div>';
+        });
+}
+
+function displayEvents(events) {
+    const container = document.getElementById('eventsList');
+    if (!events || events.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div style="font-size: 48px; margin-bottom: 20px;">📅</div>
+                <h3>No Events Found</h3>
+                <p>Click "Add Event" to create your first event</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = '';
+    events.forEach(event => {
+        const div = document.createElement('div');
+        div.className = 'event-item';
+        div.style.borderLeftColor = event.reminder !== 'No Reminder' ? '#2ed573' : '#667eea';
+        
+        div.innerHTML = `
+            <div class="event-header">
+                <div class="event-name">
+                    <span class="reminder-indicator ${event.inQueue === '0' ? 'none' : ''}"></span>
+                    ${event.name}
+                </div>
+                <div>
+                    <button class="btn btn-danger" onclick="deleteEvent(${event.id})">
+                        🗑️ Delete
+                    </button>
+                </div>
+            </div>
+            <div class="event-details">${event.details || 'No details'}</div>
+            <div class="event-meta">
+                <div><strong>🕒 ${event.date}</strong></div>
+                <div>
+                    🔔 ${event.reminder} | 
+                    🔁 ${event.repeat || 'No Repeat'}
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function deleteEvent(id) {
+    if (confirm('permanent deletion of event.')) {
+        fetch('/deleteEvent?id=' + id)
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+                loadEvents();
+            })
+            .catch(error => alert('Error deleting event: ' + error));
+    }
+}
+
+// ========== STATISTICS FUNCTIONS ==========
+function updateStats() {
+    const statsContainer = document.getElementById('statsContainer');
+    statsContainer.innerHTML = '<div class="loading"><div class="spinner"></div> Loading statistics...</div>';
+    
+    fetch('/getEvents')
+        .then(response => response.json())
+        .then(events => displayStats(calculateStats(events)))
+        .catch(error => {
+            console.error('Error loading events for stats:', error);
+            statsContainer.innerHTML = '<div class="empty-state">Error loading statistics</div>';
+        });
+}
+
+function calculateStats(events) {
+    if (!events || !Array.isArray(events)) {
+        return null;
+    }
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    
+    // Initialize stats object
+    const stats = {
+        total: events.length,
+        today: 0,
+        tomorrow: 0,
+        thisWeek: 0,
+        future: 0,
+        past: 0,
+        recurring: 0,
+        withReminders: 0,
+        upcomingCount: 0,
+        nextEvent: null,
+        allEvents: events, // Store for heatmap calculation
+        reminderTypes: {
+            none: 0,
+            hour: 0,
+            day: 0,
+            week: 0,
+            month: 0
+        },
+        repeatTypes: {
+            none: 0,
+            daily: 0,
+            weekly: 0,
+            monthly: 0,
+            yearly: 0,
+            custom: 0
+        },
+        timeSlots: {
+            morning: 0,    // 6am-12pm
+            afternoon: 0,  // 12pm-6pm
+            evening: 0,    // 6pm-10pm
+            night: 0       // 10pm-6am
+        },
+        // Heatmap data will be calculated separately
+        heatmapData: []
+    };
+    
+    // Process each event
+    events.forEach(event => {
+        try {
+            // Parse event date - adjust based on your date format
+            // Assuming format like "2024/12/25T10:30" from your code
+            const [datePart, timePart] = event.date.split('T');
+            const [year, month, date] = datePart.split('/').map(Number);
+            const [hour, minute] = timePart ? timePart.split(':').map(Number) : [0, 0];
+            
+            const eventDate = new Date(year, month - 1, date, hour, minute);
+            
+            // Check if event is today
+            if (eventDate.getFullYear() === today.getFullYear() &&
+                eventDate.getMonth() === today.getMonth() &&
+                eventDate.getDate() === today.getDate()) {
+                stats.today++;
+            }
+            
+            // Check if event is tomorrow
+            if (eventDate.getFullYear() === tomorrow.getFullYear() &&
+                eventDate.getMonth() === tomorrow.getMonth() &&
+                eventDate.getDate() === tomorrow.getDate()) {
+                stats.tomorrow++;
+            }
+            
+            // Check if event is in the next 7 days
+            if (eventDate >= today && eventDate <= nextWeek) {
+                stats.thisWeek++;
+            }
+            
+            // Past vs future
+            if (eventDate < now) {
+                stats.past++;
+            } else {
+                stats.future++;
+                stats.upcomingCount++;
+                
+                // Find next event (closest future event)
+                if (!stats.nextEvent || eventDate < stats.nextEvent.date) {
+                    stats.nextEvent = {
+                        name: event.name,
+                        date: eventDate,
+                        details: event.details,
+                        reminder: event.reminder
+                    };
+                }
+            }
+            
+            // Count recurring events
+            if (event.repeat && event.repeat !== 'No Repeat') {
+                stats.recurring++;
+                
+                // Count specific repeat types
+                const repeatLower = event.repeat.toLowerCase();
+                if (repeatLower.includes('daily')) stats.repeatTypes.daily++;
+                else if (repeatLower.includes('weekly')) stats.repeatTypes.weekly++;
+                else if (repeatLower.includes('monthly')) stats.repeatTypes.monthly++;
+                else if (repeatLower.includes('yearly')) stats.repeatTypes.yearly++;
+                else if (repeatLower.includes('custom')) stats.repeatTypes.custom++;
+                else stats.repeatTypes.none++;
+            } else {
+                stats.repeatTypes.none++;
+            }
+            
+            // Count events with reminders
+            if (event.reminder && event.reminder !== 'No Reminder') {
+                stats.withReminders++;
+                
+                // Count specific reminder types
+                if (event.reminder.includes('Hour')) stats.reminderTypes.hour++;
+                else if (event.reminder.includes('Day')) stats.reminderTypes.day++;
+                else if (event.reminder.includes('Week')) stats.reminderTypes.week++;
+                else if (event.reminder.includes('Month')) stats.reminderTypes.month++;
+            } else {
+                stats.reminderTypes.none++;
+            }
+            
+            // Time distribution
+            const eventHour = hour || 0;
+            if (eventHour >= 6 && eventHour < 12) stats.timeSlots.morning++;
+            else if (eventHour >= 12 && eventHour < 18) stats.timeSlots.afternoon++;
+            else if (eventHour >= 18 && eventHour < 22) stats.timeSlots.evening++;
+            else stats.timeSlots.night++;
+            
+        } catch (error) {
+            console.error('Error processing event:', event, error);
+        }
+    });
+    
+    // Calculate heatmap data
+    stats.heatmapData = calculateHeatmapData(events);
+    
+    return stats;
+}
+
+function calculateHeatmapData(events) {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    
+    // Get the start of current month
+    const monthStart = new Date(currentYear, currentMonth, 1);
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0);
+    
+    // Calculate weeks in the month
+    const weeks = [];
+    let weekStart = new Date(monthStart);
+    let weekNumber = 1;
+    
+    // Adjust weekStart to Monday if needed
+    const dayOfWeek = weekStart.getDay();
+    if (dayOfWeek !== 1) { // If not Monday
+        const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday = 0, adjust to previous Monday
+        weekStart.setDate(weekStart.getDate() - diff);
+    }
+    
+    while (weekStart <= monthEnd || weeks.length < 5) {
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        
+        // Count events in this week
+        let eventCount = 0;
+        events.forEach(event => {
+            try {
+                const [datePart] = event.date.split('T');
+                const [year, month, date] = datePart.split('/').map(Number);
+                const eventDate = new Date(year, month - 1, date);
+                
+                if (eventDate >= weekStart && eventDate <= weekEnd) {
+                    eventCount++;
+                }
+            } catch (e) {
+                // Skip events with invalid dates
+            }
+        });
+        
+        weeks.push({
+            weekNumber: weekNumber,
+            startDate: new Date(weekStart),
+            endDate: new Date(weekEnd),
+            count: eventCount
+        });
+        
+        // Move to next week
+        weekStart.setDate(weekStart.getDate() + 7);
+        weekNumber++;
+        
+        // Limit to 5-6 weeks max for display
+        if (weekNumber > 6) break;
+    }
+    
+    return weeks;
+}
+
+function getHeatmapColor(count, allWeeks) {
+    if (count === 0) return '#f8f9fa';
+    
+    const maxCount = Math.max(...allWeeks.map(w => w.count), 1);
+    const intensity = count / maxCount;
+    
+    if (intensity < 0.25) return '#e8f4fd';
+    if (intensity < 0.5) return '#a8d3ff';
+    if (intensity < 0.75) return '#5a9cff';
+    return '#0066ff';
+}
+
+function displayStats(stats) {
+    const container = document.getElementById('statsContainer');
+    
+    if (!stats || stats.total === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div style="font-size: 48px; margin-bottom: 20px;">📅</div>
+                <h3>No Events Found</h3>
+                <p>Click "Add Event" to create your first event</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Format next event time
+    let nextEventDisplay = 'No upcoming events';
+    if (stats.nextEvent) {
+        const nextDate = stats.nextEvent.date;
+        const now = new Date();
+        const timeDiff = nextDate - now;
+        const daysUntil = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        
+        if (daysUntil === 0) {
+            nextEventDisplay = `Today at ${nextDate.getHours().toString().padStart(2, '0')}:${nextDate.getMinutes().toString().padStart(2, '0')}`;
+        } else if (daysUntil === 1) {
+            nextEventDisplay = `Tomorrow at ${nextDate.getHours().toString().padStart(2, '0')}:${nextDate.getMinutes().toString().padStart(2, '0')}`;
+        } else if (daysUntil < 7) {
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            nextEventDisplay = `${days[nextDate.getDay()]} at ${nextDate.getHours().toString().padStart(2, '0')}:${nextDate.getMinutes().toString().padStart(2, '0')}`;
+        } else {
+            nextEventDisplay = `${nextDate.getDate().toString().padStart(2, '0')}/${(nextDate.getMonth() + 1).toString().padStart(2, '0')}`;
+        }
+    }
+    
+    // Calculate busiest week
+    const busiestWeek = stats.heatmapData.reduce((max, week) => 
+        week.count > max.count ? week : max, 
+        {weekNumber: 0, count: 0}
+    );
+    
+    // Create HTML for stats display
+    container.innerHTML = `
+        <div class="stats-grid">
+            <!-- Core Stats -->
+            <div class="stat-card">
+                <div class="value">${stats.total}</div>
+                <div class="label">Total Events</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="value">${stats.today}</div>
+                <div class="label">Today</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="value">${stats.tomorrow}</div>
+                <div class="label">Tomorrow</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="value">${stats.thisWeek}</div>
+                <div class="label">This Week</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="value">${stats.recurring}</div>
+                <div class="label">Recurring</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="value">${stats.withReminders}</div>
+                <div class="label">With Reminders</div>
+            </div>
+            
+            <!-- Next Event -->
+            <div class="stat-card" style="grid-column: span 2;">
+                <div class="value" style="font-size: 20px; min-height: 48px;">${nextEventDisplay}</div>
+                <div class="label">Next Event</div>
+            </div>
+        </div>
+        
+        <!-- Advanced Stats Toggle -->
+        <div style="text-align: center; margin: 20px 0;">
+            <button class="btn" onclick="toggleAdvancedStats()" id="toggleAdvancedBtn">
+                📊 Show Advanced Stats
+            </button>
+        </div>
+        
+        <!-- Advanced Stats Section -->
+        <div id="advancedStats" style="display: none;">
+            <h3 style="margin: 20px 0 10px 0;">Advanced Statistics</h3>
+            
+            <!-- Time Distribution -->
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                <h4 style="margin-bottom: 10px;">⏰ Time Distribution</h4>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 24px; font-weight: bold; color: #667eea;">${stats.timeSlots.morning}</div>
+                        <div style="color: #666; font-size: 14px;">🌅 Morning (6am-12pm)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 24px; font-weight: bold; color: #667eea;">${stats.timeSlots.afternoon}</div>
+                        <div style="color: #666; font-size: 14px;">☀️ Afternoon (12pm-6pm)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 24px; font-weight: bold; color: #667eea;">${stats.timeSlots.evening}</div>
+                        <div style="color: #666; font-size: 14px;">🌆 Evening (6pm-10pm)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 24px; font-weight: bold; color: #667eea;">${stats.timeSlots.night}</div>
+                        <div style="color: #666; font-size: 14px;">🌙 Night (10pm-6am)</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Monthly Heatmap -->
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                <h4 style="margin-bottom: 15px;">📅 Monthly Event Heatmap</h4>
+                
+                <!-- Heatmap Legend -->
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div style="font-size: 14px; color: #666;">Event Density:</div>
+                    <div style="display: flex; gap: 5px; align-items: center;">
+                        <div style="width: 20px; height: 20px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 3px;"></div>
+                        <span style="font-size: 12px; color: #666;">None</span>
+                        
+                        <div style="width: 20px; height: 20px; background: #e8f4fd; border: 1px solid #ddd; border-radius: 3px;"></div>
+                        <span style="font-size: 12px; color: #666;">Low</span>
+                        
+                        <div style="width: 20px; height: 20px; background: #a8d3ff; border: 1px solid #ddd; border-radius: 3px;"></div>
+                        <span style="font-size: 12px; color: #666;">Medium</span>
+                        
+                        <div style="width: 20px; height: 20px; background: #5a9cff; border: 1px solid #ddd; border-radius: 3px;"></div>
+                        <span style="font-size: 12px; color: #666;">High</span>
+                        
+                        <div style="width: 20px; height: 20px; background: #0066ff; border: 1px solid #ddd; border-radius: 3px;"></div>
+                        <span style="font-size: 12px; color: #666;">Busy</span>
+                    </div>
+                </div>
+                
+                <!-- Heatmap Grid -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px;">
+                    ${stats.heatmapData.map(week => `
+                        <div style="background: ${getHeatmapColor(week.count, stats.heatmapData)}; 
+                                    padding: 15px; 
+                                    border-radius: 8px; 
+                                    text-align: center;
+                                    border: 1px solid ${week.count > 0 ? '#cce5ff' : '#eee'};
+                                    cursor: help;
+                                    transition: transform 0.2s ease;"
+                             onmouseover="this.style.transform='scale(1.05)'"
+                             onmouseout="this.style.transform='scale(1)'"
+                             title="Week ${week.weekNumber}: ${week.startDate.toLocaleDateString('en-US', {month: 'short', day: 'numeric'})} - ${week.endDate.toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}\n${week.count} event${week.count !== 1 ? 's' : ''}">
+                            <div style="font-weight: bold; color: ${week.count > 0 ? '#333' : '#999'}; font-size: 14px;">
+                                Week ${week.weekNumber}
+                            </div>
+                            <div style="font-size: 24px; font-weight: bold; color: ${week.count > 0 ? '#0066cc' : '#ccc'}; margin: 5px 0;">
+                                ${week.count}
+                            </div>
+                            <div style="font-size: 11px; color: #666;">
+                                ${week.startDate.getDate()}-${week.endDate.getDate()}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <!-- Busiest Week Summary -->
+                <div style="background: white; padding: 15px; border-radius: 8px; border: 2px solid #0066ff; margin-top: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h5 style="margin: 0 0 5px 0; color: #333;">🏆 Busiest Week</h5>
+                            ${busiestWeek.count > 0 ? `
+                                <div style="color: #666; font-size: 14px;">
+                                    Week ${busiestWeek.weekNumber} has the most events
+                                </div>
+                            ` : `
+                                <div style="color: #999; font-size: 14px;">
+                                    No events scheduled this month
+                                </div>
+                            `}
+                        </div>
+                        ${busiestWeek.count > 0 ? `
+                            <div style="text-align: right;">
+                                <div style="font-size: 32px; font-weight: bold; color: #0066ff;">
+                                    ${busiestWeek.count}
+                                </div>
+                                <div style="font-size: 12px; color: #666;">
+                                    event${busiestWeek.count !== 1 ? 's' : ''}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function toggleAdvancedStats() {
+    const advancedSection = document.getElementById('advancedStats');
+    const toggleBtn = document.getElementById('toggleAdvancedBtn');
+    
+    if (advancedSection.style.display === 'none') {
+        advancedSection.style.display = 'block';
+        toggleBtn.textContent = '📊 Hide Advanced Stats';
+    } else {
+        advancedSection.style.display = 'none';
+        toggleBtn.textContent = '📊 Show Advanced Stats';
+    }
+}
+
+// ========== SYSTEM FUNCTIONS ==========
+function loadSystemInfo() {
+    const systemInfo = document.getElementById('systemInfo');
+    systemInfo.innerHTML = '<div class="loading"><div class="spinner"></div> Loading system info...</div>';
+    
+    fetch('/getSystemInfo')
+        .then(response => response.json())
+        .then(info => {
+            systemInfo.innerHTML = `
+                <div class="info-row">
+                    <span class="info-label">Event Structure Size:</span>
+                    <span class="info-value">${info.eventSize} bytes</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Events in Memory:</span>
+                    <span class="info-value">${info.eventsInMemory} / ${info.maxEventsInMemory}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Storage:</span>
+                    <span class="info-value">${info.usedKB}KB used, ${info.freeKB}KB free (${info.totalKB}KB total)</span>
+                </div>
+            `;
+        })
+        .catch(error => {
+            systemInfo.innerHTML = '<div class="empty-state">Error loading system info</div>';
+        });
+}
+
+// ========== INITIALIZATION ==========
+document.addEventListener('DOMContentLoaded', function() {
+    showTab('addEvent');
+    updateTime();
+    updateStats();
+    loadEvents();
+    setInterval(updateTime, 60000);
+    document.getElementById('eventRepeat').addEventListener('change', toggleRepeatOptions);
+});
+
+// ========== HELPER FUNCTIONS ==========
+function handleBackup() {
+    fetch('/backup')
+        .then(response => response.text())
+        .then(data => {
+            alert(data);
+            updateStats();
+        })
+        .catch(error => alert('Error creating backup: ' + error));
+}
+
+function exportEvents() {
+    fetch('/export')
+        .then(response => response.json())
+        .then(events => {
+            const dataStr = JSON.stringify(events, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const exportFileDefaultName = `calendar_backup_${new Date().toISOString().slice(0,10)}.json`;
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+            
+            alert('Export completed! File downloaded as ' + exportFileDefaultName);
+        })
+        .catch(error => alert('Error exporting events: ' + error));
+}
+
+function importEvents() {
+    document.getElementById('importSection').style.display = 'block';
+}
+
+function doImport() {
+    const importData = document.getElementById('importData').value.trim();
+    if (!importData) {
+        alert('Please paste JSON data to import');
+        return;
+    }
+    
+    try { JSON.parse(importData); } 
+    catch (e) { alert('Invalid JSON format'); return; }
+    
+    if (confirm('Import events? This will add to existing events.')) {
+        fetch('/import', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: importData
+        })
+        .then(response => response.text())
+        .then(data => {
+            alert(data);
+            document.getElementById('importSection').style.display = 'none';
+            document.getElementById('importData').value = '';
+            loadEvents();
+        })
+        .catch(error => alert('Error importing events: ' + error));
+    }
+}
+
+function cancelImport() {
+    document.getElementById('importSection').style.display = 'none';
+    document.getElementById('importData').value = '';
+}
+
+function factoryReset() {
+    if (confirm('WARNING: This will delete ALL events permanently!\n\nAre you absolutely sure?')) {
+        fetch('/factoryReset')
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+                loadEvents();
+                updateStats();
+                loadSystemInfo();
+            })
+            .catch(error => alert('Error resetting system: ' + error));
+    }
+}
+    </script>
+</body>
+</html>
