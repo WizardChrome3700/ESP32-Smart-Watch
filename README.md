@@ -96,6 +96,8 @@ Boilerplate for all tracked events.
         * It appends the event in the `active.bin` file.
         * It sends an alert to the client about the event added to the application.
         * It adds the event to alarmQueue.bin it it falls on today 00:00 to 23:59.
+    * **`/getEvents`(/GET)**:
+        * It reads all events from `active.bin ` file and sends them in json format to the client with the information whether the event is scheduled today or not.
     * **`/deleteEvent`(/GET)**:
         * It extracts the eventID of the event being requested to be deleted and invokes `deleteEventByID` function to delete the event from memory.
     * **`/getSystemInfo`(/GET)**:
