@@ -570,8 +570,7 @@
                 </div>
                 
                 <div id="importSection" style="display: none; margin-top: 20px;">
-                    <label for="importData">📥 Paste JSON Data:</label>
-                    <textarea id="importData" placeholder='Paste JSON data here...' style="height: 150px; font-family: monospace;"></textarea>
+                    <input type="file" id="jsonFileInput" accept=".json">
                     <div class="btn-group">
                         <button class="btn btn-success" onclick="doImport()">
                             ✅ Import
@@ -581,6 +580,7 @@
                         </button>
                     </div>
                 </div>
+                
             </div>
         </div>
     </div>
@@ -1345,30 +1345,44 @@ function importEvents() {
 }
 
 function doImport() {
-    const importData = document.getElementById('importData').value.trim();
-    if (!importData) {
-        alert('Please paste JSON data to import');
+
+    const fileInput = document.getElementById("jsonFileInput");
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert("Please select a JSON file");
         return;
     }
-    
-    try { JSON.parse(importData); } 
-    catch (e) { alert('Invalid JSON format'); return; }
-    
-    if (confirm('Import events? This will add to existing events.')) {
-        fetch('/import', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: importData
-        })
-        .then(response => response.text())
-        .then(data => {
-            alert(data);
-            document.getElementById('importSection').style.display = 'none';
-            document.getElementById('importData').value = '';
-            loadEvents();
-        })
-        .catch(error => alert('Error importing events: ' + error));
-    }
+
+    const reader = new FileReader();
+    console.log("started reading....");
+
+    reader.onload = function(e) {
+        try {
+            const jsonContent = e.target.result;
+            const data = JSON.parse(jsonContent);
+
+            console.log(data);
+
+            fetch('/import', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: jsonContent
+            })
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+                document.getElementById('importSection').style.display = 'none';
+                loadEvents();
+            })
+            .catch(error => alert('Error importing events: ' + error));
+
+        } catch (err) {
+            alert("Invalid JSON format");
+        }
+    };
+
+    reader.readAsText(file);
 }
 
 function cancelImport() {
