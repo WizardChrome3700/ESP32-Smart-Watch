@@ -456,11 +456,12 @@
                             <label for="eventRepeat">🔁 Repeat</label>
                             <select id="eventRepeat" onchange="toggleRepeatOptions()">
                                 <option value="0">No Repeat</option>
-                                <option value="1">Daily</option>
-                                <option value="2">Weekly</option>
-                                <option value="3">Monthly</option>
-                                <option value="4">Yearly</option>
-                                <option value="5">Custom</option>
+                                <option value="1">Hourly</option>
+                                <option value="2">Daily</option>
+                                <option value="3">Weekly</option>
+                                <option value="4">Monthly</option>
+                                <option value="5">Yearly</option>
+                                <option value="6">Custom</option>
                             </select>
                         </div>
                     </div>
@@ -680,13 +681,20 @@ function toggleRepeatOptions() {
     const customDaysOptions = document.getElementById('customDaysOptions');
     const intervalUnit = document.getElementById('intervalUnit');
     
+    if (repeatType === '1') {
+        document.getElementById('eventReminder').disabled = true
+    }
+    else {
+        document.getElementById('eventReminder').disabled = false
+    }
     if (repeatType > 0) {
         repeatOptions.classList.add('show');
         intervalUnit.textContent = 
-            repeatType === '1' ? 'days' :
-            repeatType === '2' ? 'weeks' :
-            repeatType === '3' ? 'months' :
-            repeatType === '4' ? 'years' : 'weeks';
+            repeatType === '1' ? 'hours' :
+            repeatType === '2' ? 'days' :
+            repeatType === '3' ? 'weeks' :
+            repeatType === '4' ? 'months' :
+            repeatType === '5' ? 'years' : 'weeks';
         
         if (customDaysOptions) {
             customDaysOptions.style.display = repeatType === '5' ? 'block' : 'none';
@@ -1323,7 +1331,7 @@ function handleBackup() {
 }
 
 function exportEvents() {
-    fetch('/export')
+    fetch('/getEvents')
         .then(response => response.json())
         .then(events => {
             const dataStr = JSON.stringify(events, null, 2);

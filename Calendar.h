@@ -286,6 +286,10 @@ public:
     if (request.indexOf("GET /getTime") != -1) {
       // Read RTC module and then send updated cTime
       /* ... */
+       while (client.connected()) {
+        String line = client.readStringUntil('\n');
+        if (line == "\r") break; // Empty line means headers are done
+      }
       client.println("HTTP/1.1 200 OK");
       client.println("Content-Type: application/json");
       client.println("Connection: close");
@@ -449,6 +453,11 @@ public:
     }
 
     if (request.indexOf("GET /getEvents") != -1) {
+      while (client.connected()) {
+        String line = client.readStringUntil('\n');
+        if (line == "\r") break; // Empty line means headers are done
+      }
+
       client.println("HTTP/1.1 200 OK");
       client.println("Content-Type: application/json");
       client.println("Connection: close");
@@ -496,6 +505,7 @@ public:
       client.print(jsonResponse);
       client.stop();
       Serial.println("Client disconnected");
+      return;
     }
 
     if (request.indexOf("GET /deleteEvent") != -1) {
