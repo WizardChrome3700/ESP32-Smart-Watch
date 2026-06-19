@@ -59,8 +59,6 @@ class RTC_DS3231 {
     Wire.endTransmission();
   }
 
-  void setAlarm
-
   void setAlarm(uint8_t hour, uint8_t minute, uint8_t second, uint8_t date) {
     Wire.beginTransmission(DS3231_ADDR);
     Wire.write(0x07);

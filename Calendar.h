@@ -8,6 +8,8 @@
 #define WARNING_THRESHOLD 400
 #define MAX_EVENTS 500
 
+const uint8_t monthDays[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+
 typedef struct {
   uint16_t id;         // 2 bytes
   char name[16];       // 16 bytes
@@ -17,7 +19,7 @@ typedef struct {
   uint8_t date;        // 1 byte
   uint8_t hour;        // 1 byte
   uint8_t minute;      // 1 byte
-  uint8_t flags1;      // 1 byte (bit6 to 5 - EventState, bit4 - isReminderSent, bit3 - isActive flag, bit2 to 0 - reminderType)
+  uint8_t flags1;      // 1 byte (bit4 to 3 - EventState, bit2 to 0 - reminderType)
   uint8_t flags2;      // 1 byte (bit5 to 3 - repeatInterval, bit2 to 0 - repeatType)
   uint8_t repeatDays;  // 1 byte (0 - Waiting for next occurrence, 1 - Reminder sent, waiting for event, 2 - Event occurred, waiting for next (recurring), 4 - Moved to archive (non-recurring)
   uint32_t deletedAt;  // 4 bytes
@@ -284,6 +286,10 @@ public:
     if (request.indexOf("GET /getTime") != -1) {
       // Read RTC module and then send updated cTime
       /* ... */
+       while (client.connected()) {
+        String line = client.readStringUntil('\n');
+        if (line == "\r") break; // Empty line means headers are done
+      }
       client.println("HTTP/1.1 200 OK");
       client.println("Content-Type: application/json");
       client.println("Connection: close");
@@ -368,13 +374,38 @@ public:
         newEvent.id = (calendarHeader.totalEvents + 1);
         eventName.toCharArray(newEvent.name, sizeof(eventName));
         eventDetails.toCharArray(newEvent.details, sizeof(eventDetails));
+        Time eventTime;
+        eventTime.year = eventYear;
+        eventTime.month = eventMonth;
+        eventTime.date = eventDate;
+        eventTime.hour = eventHour;
+        eventTime.min = eventMin;
+        eventTime.sec = 0;
+        if(compareDateTime(&cTime, &eventTime) != -1) {
+          client.print("event time is not after current time.");
+          Serial.println("WARN: event time is not after current time.");
+          // You might also want to print the LittleFS error here:
+          // Serial.println(LittleFS.error());
+          client.stop();
+          return;
+        }
         newEvent.year = eventYear;
         newEvent.month = eventMonth;
         newEvent.date = eventDate;
         newEvent.hour = eventHour;
         newEvent.minute = eventMin;
         newEvent.flags1 = 0;
-        newEvent.flags1 = (reminder & 0b00000111) | (1 << 3);
+        if(reminder > 0) {
+          newEvent.flags1 = (reminder & 0b00000111);
+          eventTime = applyReminderOffset(&newEvent);
+          if(compareDateTime(&cTime, &eventTime) != -1) {
+            newEvent.flags1 = newEvent.flags1 | (1 << 4);
+          }
+        }
+        else {
+          newEvent.flags1 = newEvent.flags1 | (1 << 4);
+        }
+
         // newEvent.flags1 = ((reminder << 2) | (0b00000001 << 3)) & ~(0b00000001 << 4) & ~((0b00000011) << 5);
         newEvent.flags2 = 0;
         newEvent.flags2 = (repeatType & 0b00000111) | (((0b00000111) & repeatInterval) << 3);
@@ -422,6 +453,11 @@ public:
     }
 
     if (request.indexOf("GET /getEvents") != -1) {
+      while (client.connected()) {
+        String line = client.readStringUntil('\n');
+        if (line == "\r") break; // Empty line means headers are done
+      }
+
       client.println("HTTP/1.1 200 OK");
       client.println("Content-Type: application/json");
       client.println("Connection: close");
@@ -469,6 +505,7 @@ public:
       client.print(jsonResponse);
       client.stop();
       Serial.println("Client disconnected");
+      return;
     }
 
     if (request.indexOf("GET /deleteEvent") != -1) {
@@ -634,6 +671,19 @@ public:
     calHeadFileRead.readBytes((char*)&calendarHeader, sizeof(FileHeader));
     calHeadFileRead.close();
 
+    // 2. CRITICAL FIX: Load the events from Flash into RAM before modifying them!
+    File activeEventsRead = LittleFS.open("/active.bin", "r");
+    if (activeEventsRead) {
+      activeEventsRead.readBytes((char*)eventsArray, calendarHeader.totalEvents * sizeof(Event));
+      activeEventsRead.close();
+    }
+
+    // 3. Now it is safe to shift the array
+    for (uint16_t i = eventID - 1; i < calendarHeader.totalEvents - 1; i++) {
+      eventsArray[i] = eventsArray[i + 1];
+      eventsArray[i].id = i + 1;
+    }
+
     for (uint16_t i = 0; i < calendarHeader.totalEvents; i++) {
       Serial.print("id: ");
       Serial.print(eventsArray[i].id);
@@ -712,82 +762,175 @@ public:
   }
 
   void eventsCleanUp() {
-    cTime.year = 2026;
-    cTime.month = 1;
-    cTime.date = 1;
     File calHeadFile = LittleFS.open("/calendarHeader.bin","r");
     calHeadFile.readBytes((char*)&calendarHeader, sizeof(FileHeader));
     calHeadFile.close();
-    File eventsFile = LittleFS.open("/active.bin","r");
-    eventsFile.readBytes((char*)eventsArray, calendarHeader.totalEvents * sizeof(Event));
-    eventsFile.close();
-    for(uint16_t i = 0; i < calendarHeader.totalEvents; i++) {
+
+    File eventsFileRead = LittleFS.open("/active.bin","r");
+    eventsFileRead.readBytes((char*)eventsArray, calendarHeader.totalEvents * sizeof(Event));
+    eventsFileRead.close();
+
+    Time time_max = julianToDate(julianDay(cTime.year, cTime.month, cTime.date), 0, 0, 0);
+
+    for(int16_t i = calendarHeader.totalEvents - 1; i >= 0; i--) {
+      Time eventTime = getEventDateTime(&eventsArray[i]);
+
+      // Self-Healing: Force missed past events to state 3 (Completed)
+      if(compareDateTime(&eventTime, &time_max) == -1) {
+        eventsArray[i].flags1 = eventsArray[i].flags1 | (3 << 3);
+      }
+
       uint8_t event_i_state = extractEventState(&eventsArray[i]);
-      if(extractReminderType(&eventsArray[i]) == 0) { // should be repeatType
-        if(event_i_state != 0) {
-          deleteEventByID(eventsArray[i].id);
+
+      if(extractRepeatType(&eventsArray[i]) == 0) { // Non-repeating
+        if(event_i_state == 3) {
+          
+          // IN-RAM DELETION (Avoids calling deleteEventByID to save Flash memory)
+          for (uint16_t j = i; j < calendarHeader.totalEvents - 1; j++) {
+            eventsArray[j] = eventsArray[j + 1];
+            eventsArray[j].id = j + 1; // Keep IDs strictly sequential
+          }
+          Event emptyEvent = { 0 };
+          eventsArray[calendarHeader.totalEvents - 1] = emptyEvent;
+          calendarHeader.totalEvents -= 1;
+        }
+      }
+      else { // Repeating
+        if(event_i_state == 3) {
+          
+          // FAST-FORWARD LOOP: Keep advancing until the event catches up to "today" or the future
+          do {
+            Time newEventTime = applyRepeatOffset(&eventsArray[i]);
+            eventsArray[i].year = newEventTime.year;
+            eventsArray[i].month = newEventTime.month;
+            eventsArray[i].date = newEventTime.date;
+            eventsArray[i].hour = newEventTime.hour;
+            eventsArray[i].minute = newEventTime.min;
+            
+            // Re-fetch the newly updated time to check if we caught up
+            eventTime = getEventDateTime(&eventsArray[i]);
+            
+          } while (compareDateTime(&eventTime, &time_max) == -1);
+
+          // Once caught up, reset the state back to 00
+          eventsArray[i].flags1 = eventsArray[i].flags1 & ~(3 << 3);
         }
       }
     }
+
+    // ONE bulk write at the end to permanently save all deletions and date updates
+    File calHeadFileWrite = LittleFS.open("/calendarHeader.bin","w");
+    calHeadFileWrite.write((uint8_t*)&calendarHeader, sizeof(FileHeader));
+    calHeadFileWrite.close();
+
+    File eventsFileWrite = LittleFS.open("/active.bin","w");
+    eventsFileWrite.write((uint8_t*)eventsArray, calendarHeader.totalEvents * sizeof(Event));
+    eventsFileWrite.close();
   }
 
+  // void recurringEventReset() {
+  //   File calHeadFile = LittleFS.open("/calendarHeader.bin","r");
+  //   calHeadFile.readBytes((char*)&calendarHeader, sizeof(FileHeader));
+  //   calHeadFile.close();
+  //   File eventsFile = LittleFS.open("/active.bin","r");
+  //   eventsFile.readBytes((char*)eventsArray, calendarHeader.totalEvents * sizeof(Event));
+  //   eventsFile.close();
+  //   for(uint16_t i = calendarHeader.totalEvents - 1; i >= 0; i--) {
+  //     if(extractRepeatType(&eventsArray[i] != 0)) {
+
+  //     }
+  //   }
+  // }
+
   void alarmQueueGen() {
-    File calHeadFile = LittleFS.open("/calendarHeader.bin","r");
+    File calHeadFile = LittleFS.open("/calendarHeader.bin", "r");
     calHeadFile.readBytes((char*)&calendarHeader, sizeof(FileHeader));
     calHeadFile.close();
-    Serial.printf("number of events: %d\r\n", calendarHeader.totalEvents);
-    File eventsFile = LittleFS.open("/active.bin","r");
+    
+    Serial.printf("Total events in memory: %d\r\n", calendarHeader.totalEvents);
+
+    File eventsFile = LittleFS.open("/active.bin", "r");
     eventsFile.readBytes((char*)eventsArray, calendarHeader.totalEvents * sizeof(Event));
     eventsFile.close();
-    for(uint16_t i = 0; i < calendarHeader.totalEvents; i++) {
-      Serial.println("=======");
-      Serial.printf("Event_name: %s\r\n", eventsArray[i].name);
-      Serial.printf("Event_id: %d\r\n", eventsArray[i].id);
-      Serial.printf("Date-time: %d.%d.%d T %d:%d\r\n", eventsArray[i].year, eventsArray[i].month, eventsArray[i].date, eventsArray[i].hour, eventsArray[i].minute);
-    }
-    Serial.println("=======");
+
     Time time_max = julianToDate(julianDay(cTime.year, cTime.month, cTime.date) + 1, 0, 0, 0);
     Time time_min = julianToDate(julianDay(cTime.year, cTime.month, cTime.date), 0, 0, 0);
+
     uint16_t alarmQueueLen = 0;
+    memset(eventsIDArray, 0, sizeof(eventsIDArray)); // Clear the queue buffer
+
+    // ==========================================
+    // STEP 1: FILTER (Find today's active events)
+    // ==========================================
     for(uint16_t i = 0; i < calendarHeader.totalEvents; i++) {
-      Event event_i = eventsArray[i];
-      Time time_i = applyReminderOffset(&event_i);
-      uint16_t min_index = i;
-      Serial.println("element"+String(i));
-      for(uint16_t j = i; j < calendarHeader.totalEvents; j++) {
-        Time time_j = applyReminderOffset(&eventsArray[j]);
-        Serial.printf("%d.%d.%d T %d:%d -Vs- %d.%d.%d T %d:%d => ", time_i.date, time_i.month, time_i.year, time_i.hour, time_i.min, time_j.date, time_j.month, time_j.year, time_j.hour, time_j.min);
-        if(compareDateTime(&time_i, &time_j) > 0) {
-          time_i = time_j;
-          event_i = eventsArray[j];
-          min_index = j;
-          Serial.println("greater");
-        }
-        else {
-          Serial.println("less than or equal.");
-        }
+      Event* e = &eventsArray[i];
+      uint8_t state = extractEventState(e);
+
+      // Skip this event if it is completely finished (State 11 / Decimal 3)
+      if (state == 3) continue; 
+
+      Time triggerTime;
+      
+      // If State is 00 (0), we are waiting for the REMINDER (or ALARM if no reminder exists)
+      if (state == 0) {
+        triggerTime = applyReminderOffset(e);
       }
-      Serial.printf("Date-time: %d.%d.%d T %d:%d\r\n", time_i.date, time_i.month, time_i.year, time_i.hour, time_i.min);
-      Serial.printf("Date-time: %d.%d.%d T %d:%d\r\n", time_min.date, time_min.month, time_min.year, time_min.hour, time_min.min);
-      Serial.printf("Date-time: %d.%d.%d T %d:%d\r\n", time_max.date, time_max.month, time_max.year, time_max.hour, time_max.min);
-      if((compareDateTime(&time_i, &time_min) >= 0) && (compareDateTime(&time_i, &time_max) < 0)) {
-        Event swap_event = eventsArray[i];
-        eventsArray[i] = eventsArray[min_index];
-        eventsArray[min_index] = swap_event;
-        alarmQueueLen += 1;
+      // If State is 10 (2), the reminder passed, we are waiting for the ALARM
+      else if (state == 2) {
+        triggerTime = getEventDateTime(e);
       }
-      else {
-        break;
+
+      // Check if the calculated trigger falls between 00:00 and 23:59 of today
+      if ((compareDateTime(&triggerTime, &time_min) >= 0) && (compareDateTime(&triggerTime, &time_max) < 0)) {
+        if (alarmQueueLen < MAX_EVENTS_PER_DAY) {
+          eventsIDArray[alarmQueueLen] = e->id;
+          alarmQueueLen++;
+        }
       }
     }
-    Serial.println("alarmQueueLen: "+String(alarmQueueLen));
-    for(uint16_t i = 0; i < alarmQueueLen; i++) {
-      Serial.println("=======");
-      Serial.printf("Event_name: %s\r\n", eventsArray[i].name);
-      Serial.printf("Event_id: %d\r\n", eventsArray[i].id);
-      Serial.printf("Date-time: %d.%d.%d T %d:%d\r\n", eventsArray[i].year, eventsArray[i].month, eventsArray[i].date, eventsArray[i].hour, eventsArray[i].minute);
+
+    // ==========================================
+    // STEP 2: SORT (Sort only the filtered IDs chronologically)
+    // ==========================================
+    for (uint16_t i = 0; i < alarmQueueLen; i++) {
+      for (uint16_t j = i + 1; j < alarmQueueLen; j++) {
+        
+        // Grab the actual events from the master array using the ID mapping
+        Event* e1 = &eventsArray[eventsIDArray[i] - 1];
+        Event* e2 = &eventsArray[eventsIDArray[j] - 1];
+
+        // Determine the relevant trigger times based on their state
+        Time t1 = (extractEventState(e1) == 0) ? applyReminderOffset(e1) : getEventDateTime(e1);
+        Time t2 = (extractEventState(e2) == 0) ? applyReminderOffset(e2) : getEventDateTime(e2);
+
+        // Swap the IDs in the queue if e1 occurs after e2
+        if (compareDateTime(&t1, &t2) > 0) {
+          uint16_t temp = eventsIDArray[i];
+          eventsIDArray[i] = eventsIDArray[j];
+          eventsIDArray[j] = temp;
+        }
+      }
     }
-    Serial.println("=======");
+
+    // ==========================================
+    // STEP 3: WRITE TO LITTLEFS
+    // ==========================================
+    File alarmQueueWrite = LittleFS.open("/alarmQueue.bin", "w");
+    if (alarmQueueWrite) {
+      Serial.println("=== ALARM QUEUE FOR TODAY ===");
+      for(uint16_t i = 0; i < alarmQueueLen; i++) {
+        Event* queuedEvent = &eventsArray[eventsIDArray[i] - 1];
+        Serial.printf("ID: %d | Name: %s\r\n", queuedEvent->id, queuedEvent->name);
+        
+        // Write exactly 2 bytes (uint16_t) per ID to the file
+        alarmQueueWrite.write((uint8_t*)&eventsIDArray[i], sizeof(uint16_t));
+      }
+      alarmQueueWrite.close();
+      Serial.printf("SUCCESS: alarmQueue.bin updated with %d events.\r\n", alarmQueueLen);
+      Serial.println("=============================");
+    } else {
+      Serial.println("ERROR: Could not open alarmQueue.bin for writing.");
+    }
   }
 
 private:
@@ -814,27 +957,27 @@ private:
   }
 
   // Extracts bit6 to 3 of flag1
-  uint8_t extractEventFlags(Event* e) {
-    return ((e->flags1 >> 3) & 0b00001111);
-  }
+  // uint8_t extractEventFlags(Event* e) {
+  //   return ((e->flags1 >> 3) & 0b00000011);
+  // }
 
   // checks if Event is active by checking bit0 of Event flags byte
-  bool isEventActive(Event* e) {
-    if (extractEventFlags(e) & 0b00000001) {
-      return true;
-    } else {
-      return false;
-    }
-  }
+  // bool isEventActive(Event* e) {
+  //   if (extractEventFlags(e) & 0b00000001) {
+  //     return true;
+  //   } else {
+  //     return false;
+  //   }
+  // }
 
   // checks if Event Reminder is sent by checking bit1 of Event flags byte
-  bool isReminderSent(Event* e) {
-    if ((extractEventFlags(e) >> 1) & 0b00000001) {
-      return true;
-    } else {
-      return false;
-    }
-  }
+  // bool isReminderSent(Event* e) {
+  //   if ((extractEventFlags(e) >> 1) & 0b00000001) {
+  //     return true;
+  //   } else {
+  //     return false;
+  //   }
+  // }
 
   // checks Event state by checking bit3 to 2 of Event flags byte
   /*
@@ -847,7 +990,8 @@ private:
       11 - Alarm reached, Reminder reached
   */
   uint8_t extractEventState(Event* e) {
-    return (extractEventFlags(e) >> 2) & 0b00000011;
+    // return (extractEventFlags(e) >> 2) & 0b00000011;
+    return ((e->flags1 >> 3) & 0b00000011);
   }
 
   Time getEventDateTime(Event* e) {
@@ -920,6 +1064,96 @@ private:
         julianTime -= 31;
         offsetDateTime = julianToDate(julianTime, e->hour, e->minute, 0);
         break;
+      default:
+        break;
+    }
+    return offsetDateTime;
+  }
+
+  Time applyRepeatOffset(Event* e) {
+    Time offsetDateTime;
+    uint32_t julianTime = julianDay(e->year, e->month, e->date);
+    uint8_t repeatType = extractRepeatType(e);
+    uint8_t dayOfWeek = (julianTime) % 7; // 0 = Monday, 1 = Tuesday, etc.
+    switch (repeatType) {
+      case 0:
+        offsetDateTime = getEventDateTime(e);
+        break;
+      case 1:
+        julianTime += extractRepeatInterval(e);
+        offsetDateTime = julianToDate(julianTime, e->hour, e->minute, 0);
+        break;
+      case 2:
+        julianTime += 7*extractRepeatInterval(e);
+        offsetDateTime = julianToDate(julianTime, e->hour, e->minute, 0);
+        break;
+      case 3:
+        offsetDateTime = getEventDateTime(e);
+        offsetDateTime.month += extractRepeatInterval(e);
+        offsetDateTime.year += (offsetDateTime.month - 1) / 12;
+        offsetDateTime.month = ((offsetDateTime.month - 1) % 12) + 1;
+        if(offsetDateTime.month == 2) {
+          if((offsetDateTime.year % 4 == 0) && (offsetDateTime.year % 100 != 0) || (offsetDateTime.year % 400 == 0)) {
+            if(offsetDateTime.date > 29) {
+              offsetDateTime.date = 29;
+            }
+          }
+          else {
+            if(offsetDateTime.date > 28) {
+              offsetDateTime.date = 28;
+            }
+          }
+        }
+        else if(offsetDateTime.date > monthDays[offsetDateTime.month - 1]) {
+          offsetDateTime.date = monthDays[offsetDateTime.month - 1];
+        }
+        break;
+      case 4:
+        offsetDateTime = getEventDateTime(e);
+        offsetDateTime.year += extractRepeatInterval(e);
+        if(offsetDateTime.month == 2) {
+          if((offsetDateTime.year % 4 == 0) && (offsetDateTime.year % 100 != 0) || (offsetDateTime.year % 400 == 0)) {
+            if(offsetDateTime.date > 29) {
+              offsetDateTime.date = 29;
+            }
+          }
+          else {
+            if(offsetDateTime.date > 28) {
+              offsetDateTime.date = 28;
+            }
+          }
+        }
+        else if(offsetDateTime.date > monthDays[offsetDateTime.month - 1]) {
+          offsetDateTime.date = monthDays[offsetDateTime.month - 1];
+        }
+        break;
+      case 5:
+      {
+          uint8_t i = dayOfWeek;
+          while(i < 7) {
+            if((((e->repeatDays >> i) & (0b000000001)) == 1) && (dayOfWeek < i)) {
+              julianTime += (i - dayOfWeek);
+              break;
+            }
+            i++;
+          }
+          if(i != 7) {
+            offsetDateTime = julianToDate(julianTime, e->hour, e->minute, 0);
+          }
+          else {
+            julianTime += 7*(extractRepeatInterval(e) - 1);
+            i = 0;
+            while(i < 7) {
+              if(((e->repeatDays >> i) & (0b000000001)) == 1) {
+                julianTime += (i - dayOfWeek + 7);
+                break;
+              }
+              i++;
+            }
+            offsetDateTime = julianToDate(julianTime, e->hour, e->minute, 0);
+          }
+          break;
+      }
       default:
         break;
     }

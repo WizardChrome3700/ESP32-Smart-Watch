@@ -15,10 +15,10 @@ void setup() {
   Serial.begin(115200);
   // FileHeader f1;
   app.begin();
-  // app.setup();
-  rtc.begin();
-  display.sh1106_init();
-  // readCalendarHeader();
+  app.setup();
+  // rtc.begin();
+  // display.sh1106_init();
+  readCalendarHeader();
 
   // app.setup();
 
